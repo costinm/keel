@@ -11,12 +11,16 @@ import (
 	"golang.org/x/net/context"
 	"google.golang.org/api/option"
 	"google.golang.org/grpc"
+	"golang.org/x/oauth2"
+	"golang.org/x/oauth2/google"
 
 	"github.com/rusenask/keel/provider"
 	"github.com/rusenask/keel/types"
 	"github.com/rusenask/keel/util/image"
 
 	log "github.com/Sirupsen/logrus"
+	"io/ioutil"
+	"os"
 )
 
 // PubsubSubscriber is Google Cloud pubsub based subscriber
@@ -50,10 +54,43 @@ func WithKeepAliveDialer() grpc.DialOption {
 	})
 }
 
+const envPrivateKey = "GOOGLE_APPLICATION_CREDENTIALS"
+
+func TokenSource(ctx context.Context, scopes ...string) oauth2.TokenSource {
+	key := os.Getenv(envPrivateKey)
+	if key != "" {
+			keyBytes, err := ioutil.ReadFile(key)
+			if err != nil {
+				log.Fatalf("Cannot read the JSON key file, err: %v", err)
+			}
+			conf, err := google.JWTConfigFromJSON(keyBytes, scopes...)
+			if err != nil {
+				log.Fatalf("google.JWTConfigFromJSON: %v", err)
+			}
+			return conf.TokenSource(ctx)
+	} else {
+		ts, err := google.DefaultTokenSource(ctx, scopes...)
+		if err != nil {
+			return nil
+		}
+		return ts
+	}
+}
+
 // NewPubsubSubscriber - create new pubsub subscriber
 func NewPubsubSubscriber(opts *Opts) (*PubsubSubscriber, error) {
+	o := []option.ClientOption{}
+
 	clientOption := option.WithGRPCDialOption(WithKeepAliveDialer())
-	client, err := pubsub.NewClient(context.Background(), opts.ProjectID, clientOption)
+	o = append(o, clientOption)
+
+	ctx := context.Background()
+	ts := TokenSource(ctx, pubsub.ScopePubSub, pubsub.ScopeCloudPlatform)
+	if false && ts == nil {
+		o = append(o, option.WithTokenSource(ts))
+	}
+
+	client, err := pubsub.NewClient(context.Background(), opts.ProjectID, o...)
 	if err != nil {
 		return nil, err
 	}

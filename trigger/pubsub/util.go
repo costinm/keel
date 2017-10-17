@@ -12,7 +12,7 @@ import (
 const MetadataEndpoint = "http://metadata/computeMetadata/v1/instance/attributes/cluster-name"
 
 func containerRegistryURI(projectID, registry string) string {
-	return registry + "%2F" + projectID
+	return "gcr"
 }
 
 func containerRegistrySubName(projectID, topic string) string {
